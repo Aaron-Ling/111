@@ -1,0 +1,390 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import scipy.stats as stats
+import numpy as np
+from scipy.stats import chi2_contingency, mannwhitneyu
+import statsmodels.api as sm
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import nltk
+
+nltk.download('vader_lexicon')
+sid = SentimentIntensityAnalyzer()
+
+class DataAnalysis:
+    def __init__(self):
+        self.df = None
+        self.variables = ['romantic_category', 'action_category', 'movie_length', 'rating', 'box_office', 'certificate']
+
+    def dataset_loading(self, file_path):
+        self.df = pd.read_csv(file_path)
+        print(f"Dataset loaded with {self.df.shape[0]} rows and {self.df.shape[1]} columns.")
+        self.handle_missing_data()
+
+    def handle_missing_data(self):
+        # Print missing values summary
+        missing_summary = self.df.isnull().sum()
+        print("Missing values summary:\n", missing_summary[missing_summary > 0])
+
+        # Convert 'movie_length' to string (categorical variable)
+        self.df['movie_length'] = self.df['movie_length'].astype(str)
+
+        # Fill missing values
+        self.df['movie_length'].fillna('Unknown', inplace=True)
+        for column in self.df.columns:
+            if pd.api.types.is_numeric_dtype(self.df[column]):
+                self.df[column].fillna(self.df[column].mean(), inplace=True)
+            else:
+                self.df[column].fillna('Unknown', inplace=True)
+
+    def display_variable_choices(self):
+        while True:
+            print("\nAvailable variables:")
+            for idx, var in enumerate(self.variables, 1):
+                print(f"{idx}. {var}")
+            print("7. Return to previous menu")
+            choices = input("Select variables by entering the numbers separated by commas: ")
+
+            if choices.strip().lower() == '7':
+                return None  # 返回选项，结束循环
+
+            selected_vars = []
+            try:
+                selected_vars = [self.variables[int(choice.strip()) - 1] for choice in choices.split(',')]
+            except (ValueError, IndexError):
+                print("Invalid selection. Please try again.")
+                continue  # 继续循环，要求重新选择
+
+            return selected_vars
+
+    def plot_variable_distribution(self):
+        print("\nSelect a variable to plot:")
+        selected_variable = self.display_variable_choices()
+        if selected_variable is None:  # 用户选择返回
+            return
+
+        selected_variable = selected_variable[0]  # 只选择第一个变量
+
+        if selected_variable == 'romantic_category':
+            plt.figure(figsize=(8, 6))
+            sns.countplot(x='romantic_category', data=self.df, palette="coolwarm")
+            plt.title('Distribution of Romantic Category')
+            plt.show()
+
+        elif selected_variable == 'action_category':
+            action_counts = self.df['action_category'].value_counts()
+            labels = [f'{cat}: {count}' for cat, count in zip(action_counts.index, action_counts)]
+            plt.pie(action_counts, labels=labels, autopct='%1.1f%%')
+            plt.title('Distribution of Action Category')
+            plt.show()
+
+        elif selected_variable == 'movie_length':
+            length_counts = self.df['movie_length'].value_counts().sort_index()
+            sns.barplot(x=length_counts.index, y=length_counts.values)
+            plt.title('Distribution of Movies Length')
+            plt.show()
+
+        elif selected_variable == 'rating':
+            plt.boxplot(self.df['rating'].dropna())
+            plt.title('Boxplot of Movie Ratings')
+            plt.xlabel('IMDB Rating')
+            plt.ylabel('Rating')
+            plt.show()
+
+        elif selected_variable == 'box_office':
+            self.df['box_office'] = pd.to_numeric(self.df['box_office'], errors='coerce') / 1e6
+            sns.boxplot(x=self.df['box_office'])
+            plt.title('Box Office Distribution (Million $)')
+            plt.show()
+
+        elif selected_variable == 'certificate':
+            sns.countplot(x='certificate', data=self.df)
+            plt.title('Distribution of Movie Certificates')
+            plt.xticks(rotation=45)
+            plt.show()
+            
+
+    def perform_anova(self):
+        while True:
+            print("\nSelect a numeric (continuous) variable for ANOVA:")
+            numeric_col = self.display_variable_choices()
+            if numeric_col is None:  # 用户选择返回
+                return
+            numeric_col = numeric_col[0]  # 选择第一个变量
+
+            print("\nSelect a categorical variable for ANOVA:")
+            category_col = self.display_variable_choices()
+            if category_col is None:  # 用户选择返回
+                return
+            category_col = category_col[0]  # 选择第一个变量
+
+            # Convert the category column to string for safe processing
+            self.df[category_col] = self.df[category_col].astype(str)
+
+            # Convert numeric column to numeric values, invalid entries will be set to NaN
+            self.df[numeric_col] = pd.to_numeric(self.df[numeric_col], errors='coerce')
+
+            # 检查 valid_groups 是否有有效数据
+            valid_groups = [self.df[numeric_col][self.df[category_col] == length].dropna()
+                            for length in self.df[category_col].unique()]
+
+            if len(valid_groups) < 2:
+                print("Error: Not enough groups with valid data for ANOVA. Please try again.")
+                continue  # 重新选择
+
+            # 绘制 Q-Q 图和直方图
+            plt.figure(figsize=(12, 5))
+
+            # Q-Q 图
+            plt.subplot(1, 2, 1)
+            sm.qqplot(self.df[numeric_col].dropna(), line='s', ax=plt.gca())
+            plt.title(f'Q-Q Plot: {numeric_col}')
+
+            # 直方图
+            plt.subplot(1, 2, 2)
+            plt.hist(self.df[numeric_col].dropna(), bins=30, alpha=0.7, color='orange')
+            plt.title(f'Histogram: {numeric_col}')
+
+            plt.show()
+
+            # Perform ANOVA
+            anova_result = stats.f_oneway(*valid_groups)
+
+            # Output ANOVA results
+            print(f"ANOVA result: F = {anova_result.statistic}, p = {anova_result.pvalue}")
+            break  # Exit the loop after a valid selection
+
+    def perform_t_test(self):
+      while True:
+        print("\nSelect a numeric (continuous) variable for t-Test:")
+        numeric_col = 'rating'  # 固定的数值型变量
+
+        print("\nSelect a categorical variable for t-Test:")
+        category_col = self.display_variable_choices()
+        if category_col is None:  # 用户选择返回
+            return
+        category_col = category_col[0]  # 选择第一个变量
+
+        unique_values = self.df[category_col].dropna().unique()
+        if len(unique_values) != 2:
+            print(f"t-Test requires exactly 2 groups in {category_col}, found {len(unique_values)}. Please try again.")
+            continue  # 重新选择
+
+        group1 = self.df[self.df[category_col] == unique_values[0]][numeric_col].dropna()
+        group2 = self.df[self.df[category_col] == unique_values[1]][numeric_col].dropna()
+
+        # Check for valid numeric data
+        if group1.empty or group2.empty:
+            print("One of the groups is empty. Please try again.")
+            continue  # 重新选择
+
+        # 绘制箱型图
+        plt.figure(figsize=(8, 6))
+        sns.boxplot(data=[group1, group2], palette="Set2")
+        plt.xticks([0, 1], unique_values)
+        plt.title(f'Boxplot of {numeric_col} by {category_col}')
+        plt.xlabel(category_col)
+        plt.ylabel(numeric_col)
+        plt.show()  # 显示箱型图
+
+        # 进行正态性检验
+        _, p1 = stats.shapiro(group1)
+        _, p2 = stats.shapiro(group2)
+
+        if p1 > 0.05 and p2 > 0.05:
+            # 如果两个组都符合正态分布，使用 t 检验
+            t_stat, t_pvalue = stats.ttest_ind(group1, group2)
+            print(f"t-Test: t-statistic = {t_stat}, p-value = {t_pvalue}")
+        else:
+            # 否则使用 Mann-Whitney U 检验
+            u_stat, u_pvalue = mannwhitneyu(group1, group2)
+            print(f"Mann-Whitney U Test: U-statistic = {u_stat}, p-value = {u_pvalue}")
+
+        break  # Exit the loop after a valid selection
+
+    def perform_chi_square(self):
+      while True:
+        print("\nSelect a categorical variable for Chi-square test:")
+        cat1 = self.display_variable_choices()
+        if cat1 is None:  # 用户选择返回
+            return
+        cat1 = cat1[0]  # 选择第一个变量
+
+        print("\nSelect another categorical variable for Chi-square test:")
+        cat2 = self.display_variable_choices()
+        if cat2 is None:  # 用户选择返回
+            return
+        cat2 = cat2[0]  # 选择第一个变量
+
+        # 创建列联表
+        contingency_table = pd.crosstab(self.df[cat1], self.df[cat2])
+
+        # Check if the contingency table has enough data
+        if contingency_table.values.sum() < 1:
+            print("Not enough data for Chi-square test. Please try again.")
+            continue  # 重新选择
+
+        # 进行卡方检验
+        chi2, p, _, _ = chi2_contingency(contingency_table)
+        print(f"Chi-square Test: Chi2 = {chi2}, p-value = {p}")
+
+        # 绘制分组柱状图
+        plt.figure(figsize=(10, 6))
+        contingency_table.plot(kind='bar', stacked=True, ax=plt.gca())
+        plt.title(f'Chi-Square Test: {cat1} vs {cat2}')
+        plt.xlabel(cat1)
+        plt.ylabel('Count')
+        plt.legend(title=cat2)
+        plt.xticks(rotation=45)
+        plt.tight_layout()  # 优化布局以避免标签重叠
+        plt.show()  # 显示图像
+
+        break  # Exit the loop after a valid selection
+
+
+    def perform_regression(self):
+      while True:
+        print("\nSelect a numeric (dependent) variable for regression:")
+        Y_col = self.display_variable_choices()
+        if Y_col is None:  # 用户选择返回
+            return
+        Y_col = Y_col[0]  # 选择第一个变量
+
+        print("\nSelect a numeric (independent) variable for regression:")
+        X_col = self.display_variable_choices()
+        if X_col is None:  # 用户选择返回
+            return
+        X_col = X_col[0]  # 选择第一个变量
+
+        # Check if both are valid numeric variables
+        if Y_col not in self.variables or X_col not in self.variables:
+            print(f"{Y_col} or {X_col} is not a valid variable. Please try again.")
+            continue  # 重新选择
+
+        Y = pd.to_numeric(self.df[Y_col], errors='coerce').dropna()
+        X = pd.to_numeric(self.df[X_col], errors='coerce').dropna()
+
+        # 确保 X 和 Y 的长度一致
+        min_length = min(len(X), len(Y))
+        if min_length == 0:
+            print("No valid data for regression. Please try again.")
+            continue  # 重新选择
+
+        X = X[:min_length]
+        Y = Y[:min_length]
+
+        slope, intercept, r_value, p_value, std_err = stats.linregress(X, Y)
+        print(f"Slope: {slope:.15f}, Intercept: {intercept:.4f}, R-squared: {r_value**2:.4f}, P-value: {p_value:.15f}")
+
+        # 绘制散点图
+        plt.figure(figsize=(10, 6))
+        plt.scatter(X, Y, alpha=0.5, label='Data points')
+        plt.plot(X, slope * X + intercept, color='red', label='Regression Line')
+        plt.title(f'Regression: {Y_col} vs {X_col}')
+        plt.xlabel(X_col)
+        plt.ylabel(Y_col)
+        plt.legend()
+        plt.show()  # 显示图像
+        
+        break  # Exit the loop after a valid selection
+
+
+
+    def perform_sentiment_analysis(self):
+      def analyze_vader_sentiment(text):
+        scores = sid.polarity_scores(text)
+        if scores['compound'] >= 0.05:
+            return 'Positive'
+        elif scores['compound'] <= -0.05:
+            return 'Negative'
+        else:
+            return 'Neutral'
+
+    # Analyze sentiments for the comments
+      self.df['sentiment_comment_1'] = self.df['comment_1'].apply(analyze_vader_sentiment)
+      self.df['sentiment_comment_2'] = self.df['comment_2'].apply(analyze_vader_sentiment)
+      self.df['sentiment_comment_3'] = self.df['comment_3'].apply(analyze_vader_sentiment)
+
+      def sentiment_to_score(sentiment):
+        if sentiment == 'Positive':
+            return 1
+        elif sentiment == 'Negative':
+            return -1
+        else:
+            return 0
+
+    # Calculate total sentiment score
+      self.df['sentiment_score'] = (self.df['sentiment_comment_1'].apply(sentiment_to_score) +
+                                   self.df['sentiment_comment_2'].apply(sentiment_to_score) +
+                                   self.df['sentiment_comment_3'].apply(sentiment_to_score))
+
+    # Count the number of occurrences of each sentiment score
+      sentiment_counts = self.df['sentiment_score'].value_counts().reindex([1, 0, -1], fill_value=0)
+
+    # Print results
+      print("rank | name | total score")
+      print("-" * 30)
+      for index, row in self.df.iterrows():
+        print(f"{row['rank']:>8} | {row['name']:<25} | {row['sentiment_score']:>7}")
+
+    # Plot sentiment scores with counts
+      plt.figure(figsize=(8, 6))
+      bars = plt.bar(sentiment_counts.index.astype(str), sentiment_counts.values, color=['green', 'blue', 'red'])
+      plt.title('Sentiment Score Counts')
+      plt.xlabel('Sentiment Score')
+      plt.ylabel('Count')
+      plt.xticks(rotation=0)
+
+    # Adding value annotations on top of bars
+      for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2, yval, int(yval), ha='center', va='bottom' if yval > 0 else 'top')
+
+      plt.tight_layout()
+      plt.show()  # 确保显示图表
+
+def main():
+    analysis = DataAnalysis()
+
+    file_path = input("Please enter the CSV file path: ")
+    analysis.dataset_loading(file_path)
+
+    while True:
+        print("\nHow do you want to analyze your data?")
+        print("1. Plot variable distribution")
+        print("2. Conduct ANOVA")
+        print("3. Conduct Regression")
+        print("4. Conduct t-Test / Mann-Whitney U Test")
+        print("5. Conduct Chi-square Test")
+        print("6. Conduct Sentiment Analysis")
+        print("7. Quit")
+
+        choice = input("Enter your choice (1 – 7): ")
+
+        if choice == '1':
+            analysis.plot_variable_distribution()
+
+        elif choice == '2':
+            analysis.perform_anova()
+
+        elif choice == '3':
+            analysis.perform_regression()
+
+        elif choice == '4':
+            analysis.perform_t_test()
+
+        elif choice == '5':
+            analysis.perform_chi_square()
+
+        elif choice == '6':
+            analysis.perform_sentiment_analysis()
+
+        elif choice == '7':
+            print("Exiting the program.")
+            break
+
+        else:
+            print("Invalid selection. Please choose a valid test.")
+
+if __name__ == "__main__":
+    main()
