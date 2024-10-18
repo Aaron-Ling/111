@@ -46,24 +46,24 @@ class DataAnalysis:
             choices = input("Select variables by entering the numbers separated by commas: ")
 
             if choices.strip().lower() == '7':
-                return None  # 返回选项，结束循环
+                return None  
 
             selected_vars = []
             try:
                 selected_vars = [self.variables[int(choice.strip()) - 1] for choice in choices.split(',')]
             except (ValueError, IndexError):
                 print("Invalid selection. Please try again.")
-                continue  # 继续循环，要求重新选择
+                continue  
 
             return selected_vars
 
     def plot_variable_distribution(self):
         print("\nSelect a variable to plot:")
         selected_variable = self.display_variable_choices()
-        if selected_variable is None:  # 用户选择返回
+        if selected_variable is None:  
             return
 
-        selected_variable = selected_variable[0]  # 只选择第一个变量
+        selected_variable = selected_variable[0]  
 
         if selected_variable == 'romantic_category':
             plt.figure(figsize=(8, 6))
@@ -108,15 +108,15 @@ class DataAnalysis:
         while True:
             print("\nSelect a numeric (continuous) variable for ANOVA:")
             numeric_col = self.display_variable_choices()
-            if numeric_col is None:  # 用户选择返回
+            if numeric_col is None: 
                 return
-            numeric_col = numeric_col[0]  # 选择第一个变量
+            numeric_col = numeric_col[0]  
 
             print("\nSelect a categorical variable for ANOVA:")
             category_col = self.display_variable_choices()
-            if category_col is None:  # 用户选择返回
+            if category_col is None: 
                 return
-            category_col = category_col[0]  # 选择第一个变量
+            category_col = category_col[0] 
 
             # Convert the category column to string for safe processing
             self.df[category_col] = self.df[category_col].astype(str)
@@ -124,23 +124,23 @@ class DataAnalysis:
             # Convert numeric column to numeric values, invalid entries will be set to NaN
             self.df[numeric_col] = pd.to_numeric(self.df[numeric_col], errors='coerce')
 
-            # 检查 valid_groups 是否有有效数据
+        
             valid_groups = [self.df[numeric_col][self.df[category_col] == length].dropna()
                             for length in self.df[category_col].unique()]
 
             if len(valid_groups) < 2:
                 print("Error: Not enough groups with valid data for ANOVA. Please try again.")
-                continue  # 重新选择
+                continue  
 
-            # 绘制 Q-Q 图和直方图
+            
             plt.figure(figsize=(12, 5))
 
-            # Q-Q 图
+            
             plt.subplot(1, 2, 1)
             sm.qqplot(self.df[numeric_col].dropna(), line='s', ax=plt.gca())
             plt.title(f'Q-Q Plot: {numeric_col}')
 
-            # 直方图
+           
             plt.subplot(1, 2, 2)
             plt.hist(self.df[numeric_col].dropna(), bins=30, alpha=0.7, color='orange')
             plt.title(f'Histogram: {numeric_col}')
@@ -157,18 +157,18 @@ class DataAnalysis:
     def perform_t_test(self):
       while True:
         print("\nSelect a numeric (continuous) variable for t-Test:")
-        numeric_col = 'rating'  # 固定的数值型变量
+        numeric_col = 'rating'  
 
         print("\nSelect a categorical variable for t-Test:")
         category_col = self.display_variable_choices()
-        if category_col is None:  # 用户选择返回
+        if category_col is None:  
             return
-        category_col = category_col[0]  # 选择第一个变量
+        category_col = category_col[0]  
 
         unique_values = self.df[category_col].dropna().unique()
         if len(unique_values) != 2:
             print(f"t-Test requires exactly 2 groups in {category_col}, found {len(unique_values)}. Please try again.")
-            continue  # 重新选择
+            continue 
 
         group1 = self.df[self.df[category_col] == unique_values[0]][numeric_col].dropna()
         group2 = self.df[self.df[category_col] == unique_values[1]][numeric_col].dropna()
@@ -176,27 +176,25 @@ class DataAnalysis:
         # Check for valid numeric data
         if group1.empty or group2.empty:
             print("One of the groups is empty. Please try again.")
-            continue  # 重新选择
+            continue  
 
-        # 绘制箱型图
+    
         plt.figure(figsize=(8, 6))
         sns.boxplot(data=[group1, group2], palette="Set2")
         plt.xticks([0, 1], unique_values)
         plt.title(f'Boxplot of {numeric_col} by {category_col}')
         plt.xlabel(category_col)
         plt.ylabel(numeric_col)
-        plt.show()  # 显示箱型图
+        plt.show() 
 
-        # 进行正态性检验
+        
         _, p1 = stats.shapiro(group1)
         _, p2 = stats.shapiro(group2)
 
         if p1 > 0.05 and p2 > 0.05:
-            # 如果两个组都符合正态分布，使用 t 检验
             t_stat, t_pvalue = stats.ttest_ind(group1, group2)
             print(f"t-Test: t-statistic = {t_stat}, p-value = {t_pvalue}")
         else:
-            # 否则使用 Mann-Whitney U 检验
             u_stat, u_pvalue = mannwhitneyu(group1, group2)
             print(f"Mann-Whitney U Test: U-statistic = {u_stat}, p-value = {u_pvalue}")
 
@@ -206,29 +204,29 @@ class DataAnalysis:
       while True:
         print("\nSelect a categorical variable for Chi-square test:")
         cat1 = self.display_variable_choices()
-        if cat1 is None:  # 用户选择返回
+        if cat1 is None: 
             return
-        cat1 = cat1[0]  # 选择第一个变量
+        cat1 = cat1[0]
 
         print("\nSelect another categorical variable for Chi-square test:")
         cat2 = self.display_variable_choices()
-        if cat2 is None:  # 用户选择返回
+        if cat2 is None:  
             return
-        cat2 = cat2[0]  # 选择第一个变量
+        cat2 = cat2[0]  
 
-        # 创建列联表
+
         contingency_table = pd.crosstab(self.df[cat1], self.df[cat2])
 
         # Check if the contingency table has enough data
         if contingency_table.values.sum() < 1:
             print("Not enough data for Chi-square test. Please try again.")
-            continue  # 重新选择
+            continue  
 
-        # 进行卡方检验
+       
         chi2, p, _, _ = chi2_contingency(contingency_table)
         print(f"Chi-square Test: Chi2 = {chi2}, p-value = {p}")
 
-        # 绘制分组柱状图
+        
         plt.figure(figsize=(10, 6))
         contingency_table.plot(kind='bar', stacked=True, ax=plt.gca())
         plt.title(f'Chi-Square Test: {cat1} vs {cat2}')
@@ -236,8 +234,8 @@ class DataAnalysis:
         plt.ylabel('Count')
         plt.legend(title=cat2)
         plt.xticks(rotation=45)
-        plt.tight_layout()  # 优化布局以避免标签重叠
-        plt.show()  # 显示图像
+        plt.tight_layout()  
+        plt.show() 
 
         break  # Exit the loop after a valid selection
 
@@ -246,29 +244,29 @@ class DataAnalysis:
       while True:
         print("\nSelect a numeric (dependent) variable for regression:")
         Y_col = self.display_variable_choices()
-        if Y_col is None:  # 用户选择返回
+        if Y_col is None:  
             return
-        Y_col = Y_col[0]  # 选择第一个变量
+        Y_col = Y_col[0]  
 
         print("\nSelect a numeric (independent) variable for regression:")
         X_col = self.display_variable_choices()
-        if X_col is None:  # 用户选择返回
+        if X_col is None:  
             return
-        X_col = X_col[0]  # 选择第一个变量
+        X_col = X_col[0] 
 
         # Check if both are valid numeric variables
         if Y_col not in self.variables or X_col not in self.variables:
             print(f"{Y_col} or {X_col} is not a valid variable. Please try again.")
-            continue  # 重新选择
+            continue 
 
         Y = pd.to_numeric(self.df[Y_col], errors='coerce').dropna()
         X = pd.to_numeric(self.df[X_col], errors='coerce').dropna()
 
-        # 确保 X 和 Y 的长度一致
+        
         min_length = min(len(X), len(Y))
         if min_length == 0:
             print("No valid data for regression. Please try again.")
-            continue  # 重新选择
+            continue  
 
         X = X[:min_length]
         Y = Y[:min_length]
@@ -276,7 +274,6 @@ class DataAnalysis:
         slope, intercept, r_value, p_value, std_err = stats.linregress(X, Y)
         print(f"Slope: {slope:.15f}, Intercept: {intercept:.4f}, R-squared: {r_value**2:.4f}, P-value: {p_value:.15f}")
 
-        # 绘制散点图
         plt.figure(figsize=(10, 6))
         plt.scatter(X, Y, alpha=0.5, label='Data points')
         plt.plot(X, slope * X + intercept, color='red', label='Regression Line')
@@ -284,7 +281,7 @@ class DataAnalysis:
         plt.xlabel(X_col)
         plt.ylabel(Y_col)
         plt.legend()
-        plt.show()  # 显示图像
+        plt.show() 
         
         break  # Exit the loop after a valid selection
 
@@ -341,7 +338,7 @@ class DataAnalysis:
         plt.text(bar.get_x() + bar.get_width() / 2, yval, int(yval), ha='center', va='bottom' if yval > 0 else 'top')
 
       plt.tight_layout()
-      plt.show()  # 确保显示图表
+      plt.show()  
 
 def main():
     analysis = DataAnalysis()
